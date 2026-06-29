@@ -321,6 +321,10 @@
 <!-- SETUP BANNER -->
 <div id="setup-banner" style="display:none;">
   <strong>⚙️ Configuration requise</strong>
+  Votre prénom (convoyeur) :
+  <input type="text" id="convoyeur-name-input" placeholder="PAUL, MARC, LUCAS…"
+    autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"
+    style="text-transform:uppercase;">
   Collez l'URL de votre Google Apps Script déployé :
   <input type="text" id="script-url-input" placeholder="https://script.google.com/macros/s/.../exec">
   <button onclick="saveScriptUrl()">Enregistrer et continuer</button>
@@ -485,6 +489,16 @@
         <button class="btn btn-primary" style="flex:0;white-space:nowrap;padding:11px 16px;" onclick="changeScriptUrl()">Mettre à jour</button>
       </div>
     </div>
+    <div style="border-top:1px solid var(--grey-border);padding-top:14px;margin-bottom:14px;">
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--grey-mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;">Nom du convoyeur (ce téléphone)</label>
+      <div id="current-convoyeur-display" style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:8px;"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="new-convoyeur-input" placeholder="PAUL, MARC, LUCAS…"
+          autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"
+          style="flex:1;min-width:140px;border:2px solid var(--grey-border);border-radius:8px;padding:10px;font-size:15px;text-transform:uppercase;">
+        <button class="btn btn-primary" style="flex:0;white-space:nowrap;padding:11px 16px;" onclick="changeConvoyeurName()">Enregistrer</button>
+      </div>
+    </div>
     <div style="border-top:1px solid var(--grey-border);padding-top:14px;">
       <label style="display:block;font-size:12px;font-weight:700;color:var(--grey-mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;">Code PIN admin</label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -549,13 +563,15 @@
 
 <script>
 // ===== CONFIG =====
-const STORAGE_URL    = 'kc_script_url';
+const STORAGE_URL       = 'kc_script_url';
+const STORAGE_CONVOYEUR = 'kc_convoyeur';
 const STORAGE_ACTIVE = 'kc_active_trips';
 const STORAGE_PIN    = 'kc_admin_pin';
 const DEFAULT_PIN    = '2712';
 const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
-let scriptUrl      = localStorage.getItem(STORAGE_URL) || '';
+let scriptUrl       = localStorage.getItem(STORAGE_URL) || '';
+let convoyeurName   = localStorage.getItem(STORAGE_CONVOYEUR) || '';
 let activeTrips    = JSON.parse(localStorage.getItem(STORAGE_ACTIVE) || '[]');
 let plaqueFormat   = 'siv';
 let startStatusOk  = true;   // état véhicule à la PRISE
@@ -583,15 +599,18 @@ window.addEventListener('load', () => {
 function updateHeader() {
   const j = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
   const d = new Date();
+  const nameStr = convoyeurName ? ` · ${convoyeurName}` : '';
   document.getElementById('header-sub').textContent =
-    `${j[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} ${d.getFullYear()}`;
+    `${j[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} ${d.getFullYear()}${nameStr}`;
 }
 
 function saveScriptUrl() {
+  const name = (document.getElementById('convoyeur-name-input').value || '').trim().toUpperCase();
   const url = document.getElementById('script-url-input').value.trim();
   if (!url.startsWith('https://script.google.com')) {
     showToast('URL invalide', 'red'); return;
   }
+  if (name) { convoyeurName = name; localStorage.setItem(STORAGE_CONVOYEUR, name); }
   scriptUrl = url;
   localStorage.setItem(STORAGE_URL, url);
   document.getElementById('setup-banner').style.display = 'none';
@@ -691,7 +710,7 @@ async function startConvoyage() {
   setLoading('btn-start', true);
   try {
     const res = await postData({
-      action: 'start', plaque, client, note, format: plaqueFormat,
+      action: 'start', plaque, client, note, format: plaqueFormat, convoyeur: convoyeurName,
       statutPrise: startStatusOk ? 'OK' : 'PROBLÈME',
       photo: photo ? photo.split(',')[1] : null,
       photoMime: photo ? photo.split(';')[0].split(':')[1] : null
@@ -851,7 +870,7 @@ function verifyPin() {
   if (pin === savedPin) {
     localStorage.setItem('kc_pin_tmp', pin);
     document.getElementById('pin-error').style.display = 'none';
-    showView('view-admin'); loadDayReport(); showCurrentUrl();
+    showView('view-admin'); loadDayReport(); showCurrentUrl(); showConvoyeurName();
   } else {
     document.getElementById('pin-error').style.display = 'block';
     document.getElementById('pin-input').value = '';
@@ -879,6 +898,24 @@ function showCurrentUrl() {
   if (!el) return;
   const url = localStorage.getItem(STORAGE_URL) || '';
   el.textContent = url || 'Aucune URL configurée';
+}
+
+function showConvoyeurName() {
+  const el = document.getElementById('current-convoyeur-display');
+  if (!el) return;
+  const name = localStorage.getItem(STORAGE_CONVOYEUR) || '';
+  el.textContent = name || 'Non configuré';
+}
+
+function changeConvoyeurName() {
+  const name = (document.getElementById('new-convoyeur-input').value || '').trim().toUpperCase();
+  if (!name) { showToast('Veuillez saisir un prénom', 'red'); return; }
+  convoyeurName = name;
+  localStorage.setItem(STORAGE_CONVOYEUR, name);
+  document.getElementById('new-convoyeur-input').value = '';
+  showConvoyeurName();
+  updateHeader();
+  showToast('Nom enregistré : ' + name + ' ✓', 'green');
 }
 
 function changePin() {
@@ -988,10 +1025,30 @@ async function loadMonthReport() {
             </div>`).join('')}
         </div>`;
       }).join('')
-    + `<div style="border-top:2px solid var(--grey-border);padding-top:14px;display:flex;justify-content:space-between;align-items:center;">
-        <strong>Total à payer au convoyeur</strong>
-        <strong style="color:var(--green);font-size:20px;">${data.total.toFixed(2)} €</strong>
-       </div>`;
+    + (() => {
+        // Total par convoyeur (uniquement ceux avec coût > 0)
+        const byConv = {};
+        data.convoyages.forEach(c => {
+          if (c.cout > 0) {
+            const k = c.convoyeur || 'Inconnu';
+            byConv[k] = (byConv[k] || 0) + (parseFloat(c.cout) || 0);
+          }
+        });
+        const convLines = Object.entries(byConv).map(([name, tot]) =>
+          `<div style="display:flex;justify-content:space-between;padding:4px 0;">
+            <span>💰 ${name}</span>
+            <strong style="color:var(--green);">${tot.toFixed(2)} €</strong>
+           </div>`
+        ).join('');
+        return `<div style="border-top:2px solid var(--grey-border);padding-top:14px;margin-top:8px;">
+          <div style="font-weight:700;margin-bottom:8px;">Total à payer :</div>
+          ${convLines || '<em style="color:var(--grey-mid);">Aucun convoyeur rémunéré ce mois</em>'}
+          <div style="display:flex;justify-content:space-between;border-top:1px solid var(--grey-border);margin-top:8px;padding-top:8px;">
+            <strong>Total général</strong>
+            <strong style="color:var(--green);font-size:20px;">${data.total.toFixed(2)} €</strong>
+          </div>
+        </div>`;
+      })();
   } catch(e) {
     document.getElementById('month-list').innerHTML = `<div class="empty-state"><p>Erreur de chargement</p></div>`;
   }
