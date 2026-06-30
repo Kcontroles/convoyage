@@ -429,6 +429,20 @@
       </button>
     </div>
   </div>
+
+  <!-- CLOTURE CROISEE -->
+  <div class="card" style="margin-top:0;">
+    <div class="card-title">Clôturer un convoyage (autre convoyeur)</div>
+    <div class="form-group">
+      <label>Plaque du véhicule</label>
+      <input type="text" id="search-plaque" class="plaque-input"
+        placeholder="AA-123-BB"
+        autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"
+        style="text-transform:uppercase;">
+    </div>
+    <button class="btn btn-outline" onclick="searchActif()" style="margin-bottom:10px;">🔍 Rechercher</button>
+    <div id="search-result"></div>
+  </div>
 </div>
 
 <!-- VUE ADMIN PIN -->
@@ -491,6 +505,13 @@
   <div class="card" style="margin-top:8px;">
     <div class="card-title">Paramètres</div>
     <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--grey-mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;">Rémunération des convoyeurs</label>
+      <p style="font-size:12px;color:var(--grey-mid);margin-bottom:10px;">Cochez les convoyeurs rémunérés et indiquez leur tarif en €.</p>
+      <div id="tarifs-list" style="margin-bottom:10px;"></div>
+      <button class="btn btn-outline" style="margin-bottom:8px;" onclick="addTarifRow()">+ Ajouter un convoyeur</button>
+      <button class="btn btn-primary" style="padding:11px;" onclick="saveTarifs()">💾 Enregistrer les tarifs</button>
+    </div>
+    <div style="border-top:1px solid var(--grey-border);padding-top:14px;margin-bottom:14px;">
       <label style="display:block;font-size:12px;font-weight:700;color:var(--grey-mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;">URL du script Google</label>
       <div id="current-url-display" style="font-size:12px;color:var(--grey-mid);word-break:break-all;margin-bottom:8px;padding:8px;background:var(--grey-light);border-radius:6px;"></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -587,6 +608,7 @@ let plaqueFormat   = 'siv';
 let startStatusOk  = true;   // état véhicule à la PRISE
 let startPhotoB64  = null;
 let currentCloseId = null;
+let currentCloseIsExternal = false;
 let modalPhotoB64  = null;
 let reportDate     = new Date();
 let reportMonth    = new Date();
@@ -741,6 +763,34 @@ async function startConvoyage() {
   setLoading('btn-start', false);
 }
 
+async function searchActif() {
+  const plaque = (document.getElementById('search-plaque').value || '').trim().toUpperCase();
+  if (!plaque) { showToast('Entrez une plaque', 'red'); return; }
+  const el = document.getElementById('search-result');
+  el.innerHTML = '<p style="color:var(--grey-mid);font-size:13px;">Recherche…</p>';
+  try {
+    const data = await getData('action=get_actifs&plaque=' + encodeURIComponent(plaque));
+    const trips = data.actifs || [];
+    if (!trips.length) {
+      el.innerHTML = '<p style="color:var(--red);font-size:13px;">Aucun convoyage EN COURS trouvé pour cette plaque.</p>';
+      return;
+    }
+    el.innerHTML = trips.map(t => `
+      <div style="border:1px solid var(--grey-border);border-radius:10px;padding:13px;margin-top:10px;border-left:4px solid var(--orange);">
+        <div style="font-size:18px;font-weight:700;font-family:monospace;letter-spacing:2px;">${t.plaque}</div>
+        <div style="font-size:12px;color:var(--grey-mid);margin-top:3px;">🏢 ${t.client || '—'} · 🕐 ${t.heurePrise} · 👤 ${t.convoyeur || '?'}</div>
+        <button class="btn btn-primary" style="margin-top:10px;" onclick="openExternalClose('${t.id}','${t.plaque}')">Clôturer ce convoyage</button>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--red);font-size:13px;">Erreur de connexion</p>';
+  }
+}
+
+function openExternalClose(id, plaque) {
+  currentCloseIsExternal = true;
+  openCloseModal(id, plaque);
+}
+
 function clearAllTrips() {
   if (!confirm('Vider tous les convoyages en cours de la liste ? (cela ne supprime rien dans le Google Sheet)')) return;
   activeTrips = [];
@@ -829,10 +879,14 @@ async function confirmClose() {
     if (res.ok) {
       activeTrips = activeTrips.filter(t => t.id !== currentCloseId);
       saveActiveTrips(); renderActiveTrips(); closeModal();
+      if (currentCloseIsExternal) { document.getElementById('search-result').innerHTML = ''; document.getElementById('search-plaque').value = ''; }
+      currentCloseIsExternal = false;
       showToast(`Livré à ${res.heure} ✅`, 'green');
     } else if (res.error && res.error.includes('introuvable')) {
       activeTrips = activeTrips.filter(t => t.id !== currentCloseId);
       saveActiveTrips(); renderActiveTrips(); closeModal();
+      if (currentCloseIsExternal) document.getElementById('search-result').innerHTML = '';
+      currentCloseIsExternal = false;
       showToast('Ancien convoyage supprimé de la liste', 'red');
     } else { showToast(res.error || 'Erreur', 'red'); }
   } catch(e) { showToast('Erreur de connexion', 'red'); }
@@ -854,10 +908,14 @@ async function confirmCloseProblem() {
     if (res.ok) {
       activeTrips = activeTrips.filter(t => t.id !== currentCloseId);
       saveActiveTrips(); renderActiveTrips(); closeModal();
+      if (currentCloseIsExternal) { document.getElementById('search-result').innerHTML = ''; document.getElementById('search-plaque').value = ''; }
+      currentCloseIsExternal = false;
       showToast(`Livré à ${res.heure} · Problème signalé ⚠️`, 'green');
     } else if (res.error && res.error.includes('introuvable')) {
       activeTrips = activeTrips.filter(t => t.id !== currentCloseId);
       saveActiveTrips(); renderActiveTrips(); closeModal();
+      if (currentCloseIsExternal) document.getElementById('search-result').innerHTML = '';
+      currentCloseIsExternal = false;
       showToast('Ancien convoyage supprimé de la liste', 'red');
     } else { showToast(res.error || 'Erreur', 'red'); }
   } catch(e) { showToast('Erreur de connexion', 'red'); }
@@ -881,12 +939,74 @@ function verifyPin() {
   if (pin === savedPin) {
     localStorage.setItem('kc_pin_tmp', pin);
     document.getElementById('pin-error').style.display = 'none';
-    showView('view-admin'); loadDayReport(); showCurrentUrl(); showConvoyeurName();
+    showView('view-admin'); loadDayReport(); showCurrentUrl(); showConvoyeurName(); loadTarifs();
   } else {
     document.getElementById('pin-error').style.display = 'block';
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-input').focus();
   }
+}
+
+// ===== TARIFS =====
+let tarifsData = {}; // { "PAUL": 3, "MARC": 0 }
+
+async function loadTarifs() {
+  try {
+    const data = await getData('action=get_tarifs');
+    tarifsData = data || { "PAUL": 3 };
+    renderTarifs();
+  } catch(e) {
+    tarifsData = { "PAUL": 3 };
+    renderTarifs();
+  }
+}
+
+function renderTarifs() {
+  const el = document.getElementById('tarifs-list');
+  if (!el) return;
+  el.innerHTML = Object.entries(tarifsData).map(([name, tarif]) => `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;" data-name="${name}">
+      <input type="checkbox" style="width:20px;height:20px;accent-color:var(--orange);flex-shrink:0;"
+        ${tarif > 0 ? 'checked' : ''} onchange="toggleTarif('${name}', this.checked)">
+      <span style="flex:1;font-weight:600;font-size:14px;">${name}</span>
+      <input type="number" min="0" step="0.5" value="${tarif}"
+        style="width:70px;border:2px solid var(--grey-border);border-radius:6px;padding:6px;font-size:14px;text-align:center;"
+        onchange="updateTarifAmount('${name}', this.value)">
+      <span style="font-size:13px;color:var(--grey-mid);">€</span>
+      <button onclick="removeTarifRow('${name}')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px;">×</button>
+    </div>`).join('') || '<p style="font-size:13px;color:var(--grey-mid);">Aucun convoyeur configuré</p>';
+}
+
+function toggleTarif(name, checked) {
+  if (!checked) tarifsData[name] = 0;
+  else tarifsData[name] = tarifsData[name] || 3;
+  renderTarifs();
+}
+
+function updateTarifAmount(name, val) {
+  tarifsData[name] = parseFloat(val) || 0;
+}
+
+function addTarifRow() {
+  const name = prompt('Prénom du convoyeur (en majuscules) :');
+  if (!name) return;
+  const n = name.trim().toUpperCase();
+  if (!n) return;
+  tarifsData[n] = 0;
+  renderTarifs();
+}
+
+function removeTarifRow(name) {
+  delete tarifsData[name];
+  renderTarifs();
+}
+
+async function saveTarifs() {
+  try {
+    const res = await postData({ action: 'set_tarifs', tarifs: tarifsData });
+    if (res.ok) showToast('Tarifs enregistrés ✓', 'green');
+    else showToast(res.error || 'Erreur', 'red');
+  } catch(e) { showToast('Erreur de connexion', 'red'); }
 }
 
 function adminLogout() { showView('view-convoyeur'); }
