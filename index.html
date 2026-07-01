@@ -434,11 +434,21 @@
   <div class="card" style="margin-top:0;">
     <div class="card-title">Clôturer un convoyage (autre convoyeur)</div>
     <div class="form-group">
+      <label>Format de la plaque</label>
+      <div class="format-toggle">
+        <button class="format-btn active" id="sfmt-siv" onclick="setSearchFormat('siv')">SIV &nbsp; AB-123-CD</button>
+        <button class="format-btn" id="sfmt-fni" onclick="setSearchFormat('fni')">FNI &nbsp; 1234 AB 56</button>
+      </div>
+    </div>
+    <div class="form-group">
       <label>Plaque du véhicule</label>
-      <input type="text" id="search-plaque" class="plaque-input"
-        placeholder="AA-123-BB"
-        autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"
-        style="text-transform:uppercase;">
+      <div class="plaque-wrap">
+        <input type="text" id="search-plaque" class="plaque-input"
+          placeholder="AB-123-CD" maxlength="9"
+          autocapitalize="characters"
+          style="text-transform:uppercase;">
+        <div class="plaque-hint" id="search-plaque-hint">Format SIV : 2 lettres – 3 chiffres – 2 lettres</div>
+      </div>
     </div>
     <button class="btn btn-outline" onclick="searchActif()" style="margin-bottom:10px;">🔍 Rechercher</button>
     <div id="search-result"></div>
@@ -609,6 +619,7 @@ let startStatusOk  = true;   // état véhicule à la PRISE
 let startPhotoB64  = null;
 let currentCloseId = null;
 let currentCloseIsExternal = false;
+let searchPlaqueFormat = 'siv';
 let modalPhotoB64  = null;
 let reportDate     = new Date();
 let reportMonth    = new Date();
@@ -675,6 +686,7 @@ function setFormat(fmt) {
 
 // Auto-masque SIV : AB-123-CD
 document.addEventListener('DOMContentLoaded', () => {
+  // Auto-masque plaque principale
   const inp = document.getElementById('input-plaque');
   inp.addEventListener('input', e => {
     if (plaqueFormat !== 'siv') {
@@ -763,9 +775,50 @@ async function startConvoyage() {
   setLoading('btn-start', false);
 }
 
+function setSearchFormat(fmt) {
+  searchPlaqueFormat = fmt;
+  const inp  = document.getElementById('search-plaque');
+  const hint = document.getElementById('search-plaque-hint');
+  document.getElementById('sfmt-siv').classList.toggle('active', fmt === 'siv');
+  document.getElementById('sfmt-fni').classList.toggle('active', fmt === 'fni');
+  inp.value = '';
+  if (fmt === 'siv') {
+    inp.placeholder = 'AB-123-CD'; inp.maxLength = 9;
+    hint.textContent = 'Format SIV : 2 lettres – 3 chiffres – 2 lettres';
+  } else {
+    inp.placeholder = '1234 AB 56'; inp.maxLength = 10;
+    hint.textContent = 'Format FNI : chiffres + lettres + n° département';
+  }
+  inp.focus();
+}
+
+// Auto-masque plaque recherche croisée
+document.addEventListener('DOMContentLoaded', () => {
+  const sinp = document.getElementById('search-plaque');
+  if (!sinp) return;
+  sinp.addEventListener('input', e => {
+    if (searchPlaqueFormat !== 'siv') {
+      e.target.value = e.target.value.replace(/[^A-Z0-9 ]/gi,'').toUpperCase();
+      return;
+    }
+    let raw = e.target.value.replace(/[^A-Z0-9]/gi,'').toUpperCase();
+    let out = '';
+    for (let i = 0; i < raw.length && i < 7; i++) {
+      if (i === 2 || i === 5) out += '-';
+      out += raw[i];
+    }
+    e.target.value = out;
+  });
+});
+
 async function searchActif() {
   const plaque = (document.getElementById('search-plaque').value || '').trim().toUpperCase();
   if (!plaque) { showToast('Entrez une plaque', 'red'); return; }
+  // Validation format
+  const validPlaque = searchPlaqueFormat === 'siv'
+    ? /^[A-Z]{2}-[0-9]{3}-[A-Z]{2}$/.test(plaque)
+    : plaque.replace(/\s/g,'').length >= 5;
+  if (!validPlaque) { showToast('Format de plaque invalide', 'red'); return; }
   const el = document.getElementById('search-result');
   el.innerHTML = '<p style="color:var(--grey-mid);font-size:13px;">Recherche…</p>';
   try {
@@ -1109,6 +1162,7 @@ async function loadDayReport() {
         <div class="trip-info">
           <div class="trip-info-plaque">${c.plaque}</div>
           ${c.client ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">🏢 ${c.client}</div>` : ''}
+          ${c.convoyeur ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">👤 ${c.convoyeur}</div>` : ''}
           <div class="trip-info-meta">
             🕐 ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ' · <em>en cours</em>'}
             ${c.notePrise ? ` · ${c.notePrise}` : ''}${c.noteCloture ? ` · ${c.noteCloture}` : ''}
