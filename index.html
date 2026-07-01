@@ -417,16 +417,18 @@
       </div>
     </div>
 
+    <!-- PHOTOS (toujours visibles) -->
+    <div class="photo-section">
+      <label>Photos du véhicule <span style="font-weight:400;color:var(--grey-mid);">(optionnel, max 5)</span></label>
+      <div class="photo-grid" id="start-photo-grid"></div>
+      <input type="file" id="start-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="addStartPhoto(event)">
+    </div>
+
     <!-- SECTION PROBLÈME À LA PRISE (masquée par défaut) -->
     <div id="start-problem-section" style="display:none;">
       <div class="form-group">
         <label>Description du problème</label>
         <textarea id="input-note" placeholder="Rayure portière, choc pare-chocs, pneu abîmé…"></textarea>
-      </div>
-      <div class="photo-section">
-        <label>Photos du dommage <span style="font-weight:400;color:var(--grey-mid);">(max 5)</span></label>
-        <div class="photo-grid" id="start-photo-grid"></div>
-        <input type="file" id="start-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="addStartPhoto(event)">
       </div>
     </div>
 
@@ -753,7 +755,7 @@ function setStartStatus(ok) {
   document.getElementById('start-status-ok').classList.toggle('selected', ok);
   document.getElementById('start-status-pb').classList.toggle('selected', !ok);
   document.getElementById('start-problem-section').style.display = ok ? 'none' : 'block';
-  if (ok) { startPhotos = []; renderStartPhotos(); } else { renderStartPhotos(); }
+  // Les photos restent quelle que soit la bascule OK/PROBLÈME
 }
 
 // ===== MULTI-PHOTO : PRISE EN CHARGE =====
@@ -839,7 +841,7 @@ async function startConvoyage() {
   const plaque  = document.getElementById('input-plaque').value.trim();
   const client  = document.getElementById('input-client').value.trim();
   const note    = startStatusOk ? '' : (document.getElementById('input-note').value.trim());
-  const photos  = startStatusOk ? [] : startPhotos;
+  const photos  = startPhotos; // toujours envoyées, OK ou PROBLÈME
 
   if (!validatePlaque(plaque)) {
     showToast('Plaque invalide — vérifiez le format', 'red'); return;
@@ -926,7 +928,7 @@ async function searchActif() {
     el.innerHTML = trips.map(t => `
       <div style="border:1px solid var(--grey-border);border-radius:10px;padding:13px;margin-top:10px;border-left:4px solid var(--orange);">
         <div style="font-size:18px;font-weight:700;font-family:monospace;letter-spacing:2px;">${t.plaque}</div>
-        <div style="font-size:12px;color:var(--grey-mid);margin-top:3px;">🏢 ${t.client || '—'} · 🕐 ${t.heurePrise} · 👤 ${t.convoyeur || '?'}</div>
+        <div style="font-size:12px;color:var(--grey-mid);margin-top:3px;">📅 ${t.date} · 🕐 ${t.heurePrise} · 🏢 ${t.client || '—'} · 👤 ${t.convoyeur || '?'}</div>
         <button class="btn btn-primary" style="margin-top:10px;" onclick="openExternalClose('${t.id}','${t.plaque}')">Clôturer ce convoyage</button>
       </div>`).join('');
   } catch(e) {
