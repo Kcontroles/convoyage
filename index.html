@@ -417,18 +417,16 @@
       </div>
     </div>
 
-    <!-- PHOTOS (toujours visibles) -->
-    <div class="photo-section">
-      <label>Photos du véhicule <span style="font-weight:400;color:var(--grey-mid);">(optionnel, max 5)</span></label>
-      <div class="photo-grid" id="start-photo-grid"></div>
-      <input type="file" id="start-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="addStartPhoto(event)">
-    </div>
-
     <!-- SECTION PROBLÈME À LA PRISE (masquée par défaut) -->
     <div id="start-problem-section" style="display:none;">
       <div class="form-group">
         <label>Description du problème</label>
         <textarea id="input-note" placeholder="Rayure portière, choc pare-chocs, pneu abîmé…"></textarea>
+      </div>
+      <div class="photo-section">
+        <label>Photos du dommage <span style="font-weight:400;color:var(--grey-mid);">(max 5)</span></label>
+        <div class="photo-grid" id="start-photo-grid"></div>
+        <input type="file" id="start-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="addStartPhoto(event)">
       </div>
     </div>
 
@@ -755,7 +753,7 @@ function setStartStatus(ok) {
   document.getElementById('start-status-ok').classList.toggle('selected', ok);
   document.getElementById('start-status-pb').classList.toggle('selected', !ok);
   document.getElementById('start-problem-section').style.display = ok ? 'none' : 'block';
-  // Les photos restent quelle que soit la bascule OK/PROBLÈME
+  if (ok) { startPhotos = []; renderStartPhotos(); }
 }
 
 // ===== MULTI-PHOTO : PRISE EN CHARGE =====
@@ -841,7 +839,7 @@ async function startConvoyage() {
   const plaque  = document.getElementById('input-plaque').value.trim();
   const client  = document.getElementById('input-client').value.trim();
   const note    = startStatusOk ? '' : (document.getElementById('input-note').value.trim());
-  const photos  = startPhotos; // toujours envoyées, OK ou PROBLÈME
+  const photos  = startStatusOk ? [] : startPhotos;
 
   if (!validatePlaque(plaque)) {
     showToast('Plaque invalide — vérifiez le format', 'red'); return;
