@@ -261,8 +261,20 @@
   .trip-list-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 11px 0; border-bottom: 1px solid var(--grey-border);
+    position: relative; overflow: hidden;
   }
   .trip-list-item:last-child { border-bottom: none; }
+  .trip-list-item.annule { opacity: 0.65; background: #fff5f5; border-radius: 6px; padding: 11px 6px; }
+  .trip-list-item.annule::after {
+    content: "ANNULÉ";
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-25deg);
+    font-size: 22px; font-weight: 900; letter-spacing: 5px;
+    color: rgba(200, 30, 30, 0.22);
+    border: 3px solid rgba(200, 30, 30, 0.22);
+    padding: 3px 10px; border-radius: 4px;
+    pointer-events: none; white-space: nowrap;
+  }
   .trip-info { flex: 1; }
   .trip-info-plaque { font-weight: 700; font-size: 14px; letter-spacing: 1.5px; font-family: 'Courier New', monospace; }
   .trip-info-meta   { font-size: 11px; color: var(--grey-mid); margin-top: 2px; }
@@ -1274,7 +1286,7 @@ async function loadDayReport() {
       return;
     }
     document.getElementById('day-list').innerHTML = data.convoyages.map(c => `
-      <div class="trip-list-item">
+      <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
         <div class="trip-info">
           <div class="trip-info-plaque">${c.plaque}</div>
           ${c.client ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">🏢 ${c.client}</div>` : ''}
@@ -1325,7 +1337,7 @@ async function loadMonthReport() {
             <span style="font-size:13px;font-weight:700;color:var(--orange);">${trips.length} convoyage${trips.length>1?'s':''} · ${totalClient.toFixed(2)}€</span>
           </div>
           ${trips.map(c => `
-            <div class="trip-list-item">
+            <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
               <div class="trip-info">
                 <div class="trip-info-plaque">${c.plaque}</div>
                 <div class="trip-info-meta">${c.date} · ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ''}</div>
@@ -1369,6 +1381,7 @@ async function loadMonthReport() {
 function statusBadge(s) {
   if (s === 'OK')       return `<span class="badge badge-green">✅ OK</span>`;
   if (s === 'PROBLÈME') return `<span class="badge badge-red">⚠️ Problème</span>`;
+  if (s === 'ANNULÉ')   return `<span class="badge badge-red">✕ Annulé</span>`;
   return `<span class="badge badge-orange">En cours</span>`;
 }
 
