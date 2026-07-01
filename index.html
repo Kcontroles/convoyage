@@ -992,6 +992,7 @@ function verifyPin() {
   if (pin === savedPin) {
     localStorage.setItem('kc_pin_tmp', pin);
     document.getElementById('pin-error').style.display = 'none';
+    reportDate = new Date(); updateDateDisplay();
     showView('view-admin'); loadDayReport(); showCurrentUrl(); showConvoyeurName(); loadTarifs();
   } else {
     document.getElementById('pin-error').style.display = 'block';
