@@ -191,9 +191,14 @@
   .badge-green  { background: var(--green-light); color: var(--green); }
   .badge-red    { background: var(--red-light); color: var(--red); }
   .btn-close-trip {
-    margin-top: 10px; padding: 11px; font-size: 14px; font-weight: 700;
+    padding: 11px; font-size: 14px; font-weight: 700;
     border: none; border-radius: 8px; background: var(--grey-dark);
     color: var(--white); width: 100%; cursor: pointer;
+  }
+  .btn-cancel-trip {
+    padding: 11px 14px; font-size: 14px; font-weight: 700;
+    border: 2px solid var(--red); border-radius: 8px; background: transparent;
+    color: var(--red); cursor: pointer; white-space: nowrap;
   }
 
   /* ===== PIN ===== */
@@ -599,6 +604,23 @@
   </div>
 </div>
 
+<!-- MODAL ANNULATION -->
+<div class="modal-overlay" id="modal-annul">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--red);">⚠️ Annuler le convoyage</div>
+    <div class="modal-plaque" id="modal-annul-plaque"></div>
+    <p style="font-size:14px;color:var(--grey-mid);margin:0 0 16px;">Le convoyage sera marqué <strong>ANNULÉ</strong> dans le Google Sheet. Une observation est obligatoire.</p>
+    <div class="form-group">
+      <label>Motif d'annulation *</label>
+      <textarea id="cancel-note" placeholder="Ex : véhicule introuvable, clés manquantes, accès refusé…" style="min-height:80px;"></textarea>
+    </div>
+    <button class="btn btn-danger" id="btn-confirm-cancel" onclick="confirmCancel()" style="margin-bottom:10px;">
+      <span>✕ Confirmer l'annulation</span>
+    </button>
+    <button class="btn btn-outline" onclick="closeCancelModal()">Retour</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -874,9 +896,14 @@ function renderActiveTrips() {
           ${t.statutPrise === 'PROBLÈME' ? `<span class="badge badge-red">⚠️ Prise</span>` : ''}
         </div>
       </div>
-      <button class="btn-close-trip" onclick="openCloseModal('${t.id}','${t.plaque}')">
-        ✔ Clôturer la prestation
-      </button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn-close-trip" style="flex:1;" onclick="openCloseModal('${t.id}','${t.plaque}')">
+          ✔ Clôturer
+        </button>
+        <button class="btn-cancel-trip" onclick="openCancelModal('${t.id}','${t.plaque}')">
+          ✕ Annuler
+        </button>
+      </div>
     </div>
   `).join('');
 }
@@ -896,6 +923,40 @@ function openCloseModal(id, plaque) {
 function closeModal() {
   document.getElementById('modal-close').classList.remove('open');
   currentCloseId = null; modalPhotoB64 = null;
+}
+
+// ===== MODAL ANNULATION =====
+let currentCancelId = null;
+
+function openCancelModal(id, plaque) {
+  currentCancelId = id;
+  document.getElementById('modal-annul-plaque').textContent = plaque;
+  document.getElementById('cancel-note').value = '';
+  document.getElementById('modal-annul').classList.add('open');
+}
+
+function closeCancelModal() {
+  document.getElementById('modal-annul').classList.remove('open');
+  currentCancelId = null;
+}
+
+async function confirmCancel() {
+  const note = document.getElementById('cancel-note').value.trim();
+  if (!note) { showToast('Veuillez saisir un motif d\'annulation', 'red'); return; }
+  setLoading('btn-confirm-cancel', true);
+  try {
+    const res = await postData({ action: 'cancel', id: currentCancelId, note });
+    if (res.ok) {
+      activeTrips = activeTrips.filter(t => t.id !== currentCancelId);
+      saveActiveTrips(); renderActiveTrips(); closeCancelModal();
+      showToast('Convoyage annulé ✕', 'red');
+    } else if (res.error && res.error.includes('introuvable')) {
+      activeTrips = activeTrips.filter(t => t.id !== currentCancelId);
+      saveActiveTrips(); renderActiveTrips(); closeCancelModal();
+      showToast('Convoyage retiré de la liste', 'red');
+    } else { showToast(res.error || 'Erreur', 'red'); }
+  } catch(e) { showToast('Erreur de connexion', 'red'); }
+  setLoading('btn-confirm-cancel', false);
 }
 
 function toggleCloseProblem() {
@@ -1292,6 +1353,9 @@ function showToast(msg, type='') {
 }
 document.getElementById('modal-close').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-close')) closeModal();
+});
+document.getElementById('modal-annul').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-annul')) closeCancelModal();
 });
 </script>
 </body>
