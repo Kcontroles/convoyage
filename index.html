@@ -692,12 +692,18 @@ window.addEventListener('load', () => {
     document.getElementById('main-header').style.display = 'flex';
     updateHeader();
     renderActiveTrips();
+    syncActiveTrips();
     if (!convoyeurName) document.getElementById('name-banner').style.display = 'block';
   }
   updateDateDisplay();
   updateMonthDisplay();
   setFormat('siv');
   renderStartPhotos();
+});
+
+// Resync quand l'utilisateur revient sur l'appli (écran rallumé, onglet réactivé)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && scriptUrl && activeTrips.length) syncActiveTrips();
 });
 
 function updateHeader() {
@@ -1115,6 +1121,23 @@ async function confirmCloseProblem() {
 }
 
 function saveActiveTrips() { localStorage.setItem(STORAGE_ACTIVE, JSON.stringify(activeTrips)); }
+
+// Synchronise la liste locale avec le serveur : retire les trips clôturés par quelqu'un d'autre
+async function syncActiveTrips() {
+  if (!scriptUrl || !activeTrips.length) return;
+  try {
+    const data = await getData('action=get_actifs');
+    const enCoursIds = new Set((data.actifs || []).map(t => t.id));
+    const avant = activeTrips.length;
+    activeTrips = activeTrips.filter(t => enCoursIds.has(t.id));
+    if (activeTrips.length !== avant) {
+      saveActiveTrips();
+      renderActiveTrips();
+      const nb = avant - activeTrips.length;
+      showToast(`${nb} convoyage${nb>1?'s':''} clôturé${nb>1?'s':''} par un autre convoyeur ✅`, 'green');
+    }
+  } catch(e) { /* silencieux si pas de réseau */ }
+}
 
 // ===== ADMIN =====
 function goAdmin() {
