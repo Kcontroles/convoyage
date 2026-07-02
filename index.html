@@ -258,6 +258,18 @@
   }
   .date-nav span { font-weight: 700; font-size: 14px; color: var(--grey-dark); }
 
+  /* ===== ACCORDÉON CONVOYEUR ===== */
+  .conv-group { border: 1px solid var(--grey-border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .conv-group-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px; background: var(--grey-light); cursor: pointer; user-select: none;
+  }
+  .conv-group-header:active { background: #ddd; }
+  .conv-group-body { padding: 0 12px; display: none; }
+  .conv-group-body.open { display: block; }
+  .conv-chevron { font-size: 11px; color: var(--grey-mid); display: inline-block; transition: transform 0.2s; }
+  .conv-chevron.open { transform: rotate(180deg); }
+
   .trip-list-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 11px 0; border-bottom: 1px solid var(--grey-border);
@@ -1285,22 +1297,42 @@ async function loadDayReport() {
       document.getElementById('day-list').innerHTML = `<div class="empty-state"><div class="icon">📊</div><p>Aucun convoyage ce jour</p></div>`;
       return;
     }
-    document.getElementById('day-list').innerHTML = data.convoyages.map(c => `
-      <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
-        <div class="trip-info">
-          <div class="trip-info-plaque">${c.plaque}</div>
-          ${c.client ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">🏢 ${c.client}</div>` : ''}
-          ${c.convoyeur ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">👤 ${c.convoyeur}</div>` : ''}
-          <div class="trip-info-meta">
-            🕐 ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ' · <em>en cours</em>'}
-            ${c.notePrise ? ` · ${c.notePrise}` : ''}${c.noteCloture ? ` · ${c.noteCloture}` : ''}
+    document.getElementById('day-list').innerHTML = groupByConvoyeur(data.convoyages)
+      .map(([conv, trips], idx) => {
+        const id       = `day-g-${idx}`;
+        const realises = trips.filter(c => c.statutCloture !== 'ANNULÉ');
+        const total    = realises.reduce((s,c) => s + (parseFloat(c.cout)||0), 0);
+        return `
+        <div class="conv-group">
+          <div class="conv-group-header" onclick="toggleGroup('${id}')">
+            <div>
+              <span style="font-weight:700;">👤 ${conv}</span>
+              <span style="font-size:12px;color:var(--grey-mid);margin-left:8px;">${realises.length} convoyage${realises.length!==1?'s':''}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              ${total > 0 ? `<span style="font-weight:700;color:var(--green);">${total.toFixed(2)}€</span>` : ''}
+              <span class="conv-chevron" id="chev-${id}">▼</span>
+            </div>
           </div>
-          ${c.photoPrise ? `<a class="trip-photo-link" href="${c.photoPrise}" target="_blank">📷 Photo prise</a>` : ''}
-          ${c.photoCloture ? `<a class="trip-photo-link" href="${c.photoCloture}" target="_blank">📷 Photo clôture</a>` : ''}
-          <div style="margin-top:3px;">${statusBadge(c.statutPrise)} ${statusBadge(c.statutCloture)}</div>
-        </div>
-        <div class="trip-info-cost">${c.cout ? c.cout+'€' : '—'}</div>
-      </div>`).join('');
+          <div class="conv-group-body" id="${id}">
+            ${trips.map(c => `
+              <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
+                <div class="trip-info">
+                  <div class="trip-info-plaque">${c.plaque}</div>
+                  ${c.client ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">🏢 ${c.client}</div>` : ''}
+                  <div class="trip-info-meta">
+                    🕐 ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ' · <em>en cours</em>'}
+                    ${c.notePrise ? ` · ${c.notePrise}` : ''}${c.noteCloture ? ` · ${c.noteCloture}` : ''}
+                  </div>
+                  ${c.photoPrise ? `<a class="trip-photo-link" href="${c.photoPrise}" target="_blank">📷 Photo prise</a>` : ''}
+                  ${c.photoCloture ? `<a class="trip-photo-link" href="${c.photoCloture}" target="_blank">📷 Photo clôture</a>` : ''}
+                  <div style="margin-top:3px;">${statusBadge(c.statutPrise)} ${statusBadge(c.statutCloture)}</div>
+                </div>
+                <div class="trip-info-cost">${c.cout ? c.cout+'€' : '—'}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+      }).join('');
   } catch(e) {
     document.getElementById('day-list').innerHTML = `<div class="empty-state"><p>Erreur de chargement</p></div>`;
   }
@@ -1317,36 +1349,37 @@ async function loadMonthReport() {
       document.getElementById('month-list').innerHTML = `<div class="empty-state"><div class="icon">📅</div><p>Aucun convoyage ce mois</p></div>`;
       return;
     }
-    // Groupement par client pour le récap mensuel
-    const byClient = {};
-    data.convoyages.forEach(c => {
-      const key = c.client || 'Client inconnu';
-      if (!byClient[key]) byClient[key] = [];
-      byClient[key].push(c);
-    });
-    const clientEntries = Object.entries(byClient).sort((a,b) => a[0].localeCompare(b[0]));
-
-    document.getElementById('month-list').innerHTML =
-      clientEntries.map(([client, trips]) => {
-        const totalClient = trips.reduce((s, c) => s + (parseFloat(c.cout) || 0), 0);
+    document.getElementById('month-list').innerHTML = groupByConvoyeur(data.convoyages)
+      .map(([conv, trips], idx) => {
+        const id       = `mo-g-${idx}`;
+        const realises = trips.filter(c => c.statutCloture !== 'ANNULÉ');
+        const total    = realises.reduce((s,c) => s + (parseFloat(c.cout)||0), 0);
         return `
-        <div style="margin-bottom:18px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;
-            background:var(--grey-light);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
-            <span style="font-size:13px;font-weight:700;color:var(--grey-dark);">🏢 ${client}</span>
-            <span style="font-size:13px;font-weight:700;color:var(--orange);">${trips.length} convoyage${trips.length>1?'s':''} · ${totalClient.toFixed(2)}€</span>
+        <div class="conv-group">
+          <div class="conv-group-header" onclick="toggleGroup('${id}')">
+            <div>
+              <span style="font-weight:700;">👤 ${conv}</span>
+              <span style="font-size:12px;color:var(--grey-mid);margin-left:8px;">${realises.length} convoyage${realises.length!==1?'s':''}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              ${total > 0 ? `<span style="font-weight:700;color:var(--green);">${total.toFixed(2)}€</span>` : ''}
+              <span class="conv-chevron" id="chev-${id}">▼</span>
+            </div>
           </div>
-          ${trips.map(c => `
-            <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
-              <div class="trip-info">
-                <div class="trip-info-plaque">${c.plaque}</div>
-                <div class="trip-info-meta">${c.date} · ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ''}</div>
-                ${c.photoPrise ? `<a class="trip-photo-link" href="${c.photoPrise}" target="_blank">📷 Prise</a>` : ''}
-                ${c.photoCloture ? `<a class="trip-photo-link" href="${c.photoCloture}" target="_blank">📷 Clôture</a>` : ''}
-                <div style="margin-top:3px;">${statusBadge(c.statutPrise)} ${statusBadge(c.statutCloture)}</div>
-              </div>
-              <div class="trip-info-cost">${c.cout ? c.cout+'€' : '—'}</div>
-            </div>`).join('')}
+          <div class="conv-group-body" id="${id}">
+            ${trips.map(c => `
+              <div class="trip-list-item${c.statutCloture === 'ANNULÉ' ? ' annule' : ''}">
+                <div class="trip-info">
+                  <div class="trip-info-plaque">${c.plaque}</div>
+                  ${c.client ? `<div class="trip-note" style="font-size:12px;color:var(--grey-mid);">🏢 ${c.client}</div>` : ''}
+                  <div class="trip-info-meta">${c.date} · ${c.heurePrise}${c.heureCloture ? ' → '+c.heureCloture : ''}</div>
+                  ${c.photoPrise ? `<a class="trip-photo-link" href="${c.photoPrise}" target="_blank">📷 Prise</a>` : ''}
+                  ${c.photoCloture ? `<a class="trip-photo-link" href="${c.photoCloture}" target="_blank">📷 Clôture</a>` : ''}
+                  <div style="margin-top:3px;">${statusBadge(c.statutPrise)} ${statusBadge(c.statutCloture)}</div>
+                </div>
+                <div class="trip-info-cost">${c.cout ? c.cout+'€' : '—'}</div>
+              </div>`).join('')}
+          </div>
         </div>`;
       }).join('')
     + (() => {
@@ -1376,6 +1409,23 @@ async function loadMonthReport() {
   } catch(e) {
     document.getElementById('month-list').innerHTML = `<div class="empty-state"><p>Erreur de chargement</p></div>`;
   }
+}
+
+function toggleGroup(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-'+id);
+  const open = body.classList.toggle('open');
+  if (chev) chev.classList.toggle('open', open);
+}
+
+function groupByConvoyeur(convoyages) {
+  const map = {};
+  convoyages.forEach(c => {
+    const k = c.convoyeur || '—';
+    if (!map[k]) map[k] = [];
+    map[k].push(c);
+  });
+  return Object.entries(map).sort((a,b) => a[0].localeCompare(b[0]));
 }
 
 function statusBadge(s) {
